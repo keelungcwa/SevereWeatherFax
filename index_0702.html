@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>災害性天氣傳真通報管理平台｜原型 Demo</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{
+  --navy:#14213d;
+  --navy-light:#1f3a63;
+  --navy-pale:#eef1f7;
+  --amber:#e8a33d;
+  --amber-pale:#fbf1de;
+  --sky:#5b8fc4;
+  --bg:#f5f6f8;
+  --surface:#ffffff;
+  --red:#c0392b;
+  --red-pale:#fbeae8;
+  --green:#2f8a5b;
+  --green-pale:#e9f5ef;
+  --ink:#1c2430;
+  --muted:#6b7280;
+  --border:#e2e5ea;
+  --radius:10px;
+  font-family:"PingFang TC","Microsoft JhengHei","Noto Sans TC",-apple-system,sans-serif;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);transition:background .2s;}
+/* 管理者模式：切換到審核管理端時，全站色調改為深灰＋古銅金，強化身分區別 */
+body.role-reviewer{
+  --navy:#23252b;
+  --navy-light:#35373f;
+  --navy-pale:#e9e8e6;
+  --amber:#b9872e;
+  --amber-pale:#f6ecd9;
+  --bg:#f2f0ee;
+}
+body.role-reviewer .brand-eyebrow{color:#e2b563;}
+button{font-family:inherit;cursor:pointer;}
+.app{display:flex;min-height:100vh;}
+
+/* ---------- Sidebar ---------- */
+.sidebar{width:220px;flex-shrink:0;background:var(--navy);color:#fff;display:flex;flex-direction:column;}
+.brand{padding:22px 20px 18px;border-bottom:1px solid rgba(255,255,255,.12);}
+.brand-eyebrow{font-size:11px;letter-spacing:.12em;color:var(--amber);font-weight:700;}
+.brand-title{font-size:17px;font-weight:700;margin-top:4px;line-height:1.4;}
+nav.mainnav{padding:10px;flex:1;}
+.navitem{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:8px;color:rgba(255,255,255,.78);font-size:14px;cursor:pointer;margin-bottom:2px;border:none;background:none;width:100%;text-align:left;}
+.navitem:hover{background:rgba(255,255,255,.08);}
+.navitem.active{background:var(--navy-light);color:#fff;font-weight:700;}
+.navitem .dot{width:6px;height:6px;border-radius:50%;background:transparent;}
+.navitem.active .dot{background:var(--amber);}
+.sidebar-foot{padding:14px 20px;font-size:11px;color:rgba(255,255,255,.4);border-top:1px solid rgba(255,255,255,.12);}
+
+/* ---------- Main ---------- */
+.main{flex:1;min-width:0;display:flex;flex-direction:column;}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 32px;display:flex;align-items:center;justify-content:space-between;gap:24px;}
+.topbar h1{font-size:19px;margin:0;}
+.topbar .sub{font-size:12.5px;color:var(--muted);margin-top:3px;}
+.topbar-right{display:flex;align-items:center;gap:16px;flex-shrink:0;}
+.role-switch-top{text-align:right;}
+.role-switch-top label{font-size:10.5px;color:var(--muted);display:block;margin-bottom:5px;letter-spacing:.05em;}
+.role-btns-top{display:flex;background:var(--navy-pale);border-radius:8px;padding:3px;border:1px solid rgba(20,33,61,.1);}
+.role-btns-top button{background:none;border:none;color:var(--navy);opacity:.6;font-size:12.5px;padding:7px 14px;border-radius:6px;transition:.15s;font-weight:600;}
+.role-btns-top button:hover{opacity:.85;}
+.role-btns-top button.active{opacity:1;}
+/* 客戶端／審核管理端切換：分別使用深藍與古銅金，加強身分對比感 */
+.role-btns-top button#btnRoleCustomer.active{background:var(--navy);color:#fff;box-shadow:0 2px 8px rgba(20,33,61,.3);}
+.role-btns-top button#btnRoleReviewer.active{background:#b9872e;color:#fff;box-shadow:0 2px 8px rgba(185,135,46,.4);}
+.userchip{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);cursor:pointer;padding:4px 8px 4px 4px;border-radius:8px;transition:.15s;}
+.userchip:hover{background:var(--navy-pale);}
+.userchip .chip-caret{font-size:10px;color:var(--muted);margin-left:2px;}
+.userchip .avatar{width:32px;height:32px;border-radius:50%;background:var(--navy-pale);color:var(--navy);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;}
+.content{padding:28px 32px;flex:1;}
+.view{display:none;}
+.view.active{display:block;}
+
+/* ---------- Cards / summary ---------- */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;}
+.card .num{font-size:28px;font-weight:800;color:var(--navy);}
+.card .label{font-size:12.5px;color:var(--muted);margin-top:4px;}
+
+/* ---------- Table ---------- */
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+.panel-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.panel-head h2{font-size:15px;margin:0;}
+table{width:100%;border-collapse:collapse;font-size:13.5px;}
+th{text-align:left;padding:10px 20px;background:var(--navy-pale);color:var(--navy);font-weight:700;font-size:12px;letter-spacing:.03em;}
+td{padding:12px 20px;border-top:1px solid var(--border);vertical-align:middle;}
+tr.rowbtn{cursor:pointer;}
+tr.rowbtn:hover td{background:#fafbfc;}
+
+/* status light badges - inspired by CWA's 燈號 warning-level system */
+.light{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 8px;border-radius:20px;font-size:12px;font-weight:700;}
+.light .bulb{width:8px;height:8px;border-radius:50%;}
+.light.pending{background:var(--amber-pale);color:#8a5b12;}
+.light.pending .bulb{background:var(--amber);box-shadow:0 0 0 3px rgba(232,163,61,.25);}
+.light.approved{background:var(--green-pale);color:var(--green);}
+.light.approved .bulb{background:var(--green);}
+.light.rejected{background:var(--red-pale);color:var(--red);}
+.light.rejected .bulb{background:var(--red);}
+.light.active{background:var(--red-pale);color:var(--red);}
+.light.active .bulb{background:var(--red);box-shadow:0 0 0 3px rgba(192,57,43,.2);}
+.light.cleared{background:var(--navy-pale);color:var(--navy);}
+.light.cleared .bulb{background:var(--sky);}
+
+.btn{border:1px solid var(--border);background:var(--surface);padding:9px 16px;border-radius:7px;font-size:13px;font-weight:600;color:var(--ink);}
+.btn:hover{border-color:var(--sky);}
+.btn-primary{background:var(--navy);color:#fff;border-color:var(--navy);}
+.btn-primary:hover{background:var(--navy-light);}
+.btn-approve{background:var(--green);color:#fff;border-color:var(--green);}
+.btn-reject{background:var(--red);color:#fff;border-color:var(--red);}
+
+/* ---------- Form ---------- */
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px 20px;}
+.formgrid.full{grid-template-columns:1fr;}
+.field{margin-bottom:2px;}
+.field label{display:block;font-size:12.5px;font-weight:700;color:var(--navy);margin-bottom:6px;}
+.field .hint{font-weight:400;color:var(--muted);margin-left:4px;}
+.field input[type=text],.field input[type=tel],.field input[type=email],.field select,.field textarea{
+  width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:7px;font-size:13.5px;font-family:inherit;background:#fff;
+}
+.field textarea{resize:vertical;min-height:70px;}
+.checkgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.checkitem{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:7px;padding:9px 11px;font-size:13px;}
+.checkitem input{accent-color:var(--navy);}
+.section-title{font-size:13px;font-weight:800;color:var(--navy);margin:26px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--navy-pale);display:flex;align-items:center;gap:8px;}
+.section-title .n{width:20px;height:20px;border-radius:5px;background:var(--navy);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;}
+.faxrow{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-bottom:8px;}
+.radio-inline{display:flex;gap:14px;font-size:13.5px;}
+.radio-inline label{display:flex;align-items:center;gap:6px;font-weight:400;color:var(--ink);}
+.confirm-box{background:var(--amber-pale);border:1px solid #ecc98a;border-radius:8px;padding:14px 16px;margin-top:20px;font-size:13px;display:flex;gap:10px;align-items:flex-start;}
+.confirm-box input{margin-top:3px;}
+.sign-pad,.upload-zone{border:1px dashed var(--border);border-radius:8px;padding:22px;text-align:center;background:#fafbfc;font-size:13px;color:var(--muted);}
+.upload-zone{cursor:pointer;transition:.12s;}
+.upload-zone:hover{border-color:var(--sky);color:var(--ink);background:#f5f9fc;}
+.sign-pad .btn{margin-top:12px;}
+.sig-status{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--green);margin-top:10px;}
+.notif-wrap{position:relative;}
+.bell-btn{position:relative;background:none;border:none;font-size:19px;cursor:pointer;color:var(--ink);padding:6px;border-radius:8px;line-height:1;}
+.bell-btn:hover{background:var(--navy-pale);}
+.bell-badge{position:absolute;top:0;right:0;background:var(--red);color:#fff;font-size:10px;font-weight:800;border-radius:50%;min-width:16px;height:16px;display:flex;align-items:center;justify-content:center;padding:0 3px;border:2px solid var(--surface);}
+.notif-dropdown{position:absolute;top:46px;right:0;width:340px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 16px 40px rgba(20,24,32,.18);z-index:500;display:none;max-height:440px;overflow-y:auto;}
+.notif-dropdown.active{display:block;}
+.notif-head{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:13px;position:sticky;top:0;background:#fff;}
+.notif-item{padding:11px 16px;border-bottom:1px solid #f1f2f4;cursor:pointer;font-size:12.5px;display:flex;gap:8px;align-items:flex-start;}
+.notif-item:hover{background:#fafbfc;}
+.notif-item .nd{width:7px;height:7px;border-radius:50%;margin-top:5px;flex-shrink:0;}
+.notif-item .nt{font-weight:700;margin-bottom:2px;}
+.notif-item .nm{color:var(--muted);}
+.notif-empty{padding:32px 16px;text-align:center;color:var(--muted);font-size:12.5px;}
+.sub-chip.preview{cursor:pointer;}
+.sub-chip.preview:hover{box-shadow:0 0 0 2px rgba(20,33,61,.1);}
+.sub-chip.preview .sub-icon{pointer-events:none;}
+.org-summary{background:var(--navy-pale);border-radius:var(--radius);padding:16px 20px;display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:22px;}
+.org-summary .name{font-weight:700;font-size:15px;color:var(--navy);}
+.org-summary .meta{font-size:12.5px;color:var(--muted);margin-top:4px;line-height:1.7;}
+.profile-layout{display:grid;grid-template-columns:380px 1fr;gap:20px;align-items:start;}
+.locked-panel{background:#f7f8fa;border:1px dashed #cfd4dc;border-radius:var(--radius);padding:22px 24px;}
+.locked-head{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:6px;flex-wrap:wrap;}
+.locked-head h3{font-size:14px;margin:0;color:var(--navy);}
+.locked-desc{font-size:12px;color:var(--muted);margin:6px 0 18px;line-height:1.6;padding-bottom:16px;border-bottom:1px solid #e6e8ec;}
+.sub-section-label{font-size:11px;font-weight:800;color:var(--navy);letter-spacing:.06em;margin:16px 0 10px;display:flex;align-items:center;gap:8px;}
+.sub-section-label::after{content:'';flex:1;height:1px;background:#e6e8ec;}
+.sub-flow{display:flex;flex-wrap:wrap;gap:8px;}
+.sub-chip{display:inline-flex;align-items:center;gap:7px;padding:7px 12px 7px 8px;border-radius:20px;font-size:12.5px;background:#fff;border:1px solid var(--border);white-space:nowrap;}
+.sub-chip.off{color:var(--red);border:1px dashed rgba(192,57,43,.45);background:var(--red-pale);}
+.sub-icon{width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0;}
+.sub-icon.on{background:var(--green);color:#fff;}
+.sub-icon.off{background:var(--red);color:#fff;}
+.chip-toggle{cursor:pointer;transition:.12s;}
+.chip-toggle:hover{filter:brightness(0.97);}
+.chip-toggle.locked-chip{cursor:default;opacity:.9;}
+.sub-meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 28px;}
+.sub-meta-row{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:8px 0;border-bottom:1px solid #e6e8ec;}
+.sub-meta-row .k{color:var(--muted);flex-shrink:0;}
+.sub-meta-row .v{font-weight:700;text-align:right;color:var(--ink);}
+
+/* ---------- Map view ---------- */
+.maplayout{display:grid;grid-template-columns:380px 1fr;gap:20px;}
+.mapwrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;}
+#leafletMap{height:440px;width:100%;border-radius:8px;}
+.mapcaption{font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.6;}
+.legend{display:flex;gap:16px;margin-top:12px;font-size:11.5px;color:var(--muted);}
+.legend span{display:inline-flex;align-items:center;gap:5px;}
+.legend i{width:9px;height:9px;border-radius:50%;display:inline-block;}
+
+/* ---------- Modal ---------- */
+.overlay{position:fixed;inset:0;background:rgba(20,33,61,.55);display:none;align-items:center;justify-content:center;z-index:9999;padding:20px;}
+.overlay.active{display:flex;}
+.modal{background:#fff;border-radius:12px;max-width:640px;width:100%;max-height:88vh;overflow-y:auto;}
+.modal-head{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;}
+.modal-head h2{font-size:16px;margin:0;}
+.modal-close{background:none;border:none;font-size:20px;color:var(--muted);line-height:1;}
+.modal-body{padding:22px 24px;}
+.detail-row{display:flex;padding:9px 0;border-bottom:1px solid #f1f2f4;font-size:13.5px;}
+.detail-row .k{width:140px;flex-shrink:0;color:var(--muted);}
+.detail-row .v{font-weight:600;flex:1;min-width:0;}
+.modal-foot{padding:16px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;}
+
+.empty{padding:60px 20px;text-align:center;color:var(--muted);font-size:13.5px;}
+.badge-type{display:inline-block;background:var(--navy-pale);color:var(--navy);font-size:11px;font-weight:700;padding:3px 9px;border-radius:5px;}
+.filter-bar{display:flex;gap:8px;align-items:center;}
+.filter-bar select,.filter-bar input{padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;font-family:inherit;background:#fff;}
+.filter-bar input{width:200px;}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--navy);color:#fff;padding:13px 20px;border-radius:8px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,.2);display:none;z-index:9999;}
+.toast.show{display:block;}
+@media(max-width:900px){.formgrid,.maplayout{grid-template-columns:1fr;}.checkgrid{grid-template-columns:repeat(2,1fr);}.topbar{flex-wrap:wrap;}.sub-meta-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-eyebrow">交通部中央氣象署</div>
+      <div class="brand-title">災害性天氣傳真通報<br>管理平台</div>
+    </div>
+    <nav class="mainnav" id="mainnav"></nav>
+    <div class="sidebar-foot">原型 Demo・資料為模擬示意<br>v0.2</div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h1 id="pageTitle">我的申請</h1>
+        <div class="sub" id="pageSub">檢視與管理您單位的通報服務申請</div>
+      </div>
+      <div class="topbar-right">
+        <div class="role-switch-top">
+          <label>展示身分切換（原型用）</label>
+          <div class="role-btns-top">
+            <button id="btnRoleCustomer" class="active" onclick="setRole('customer')">客戶端</button>
+            <button id="btnRoleReviewer" onclick="setRole('reviewer')">審核管理端</button>
+          </div>
+        </div>
+        <div class="notif-wrap" id="notifWrap">
+          <button class="bell-btn" onclick="toggleNotif()">🔔<span class="bell-badge" id="bellBadge" style="display:none;">0</span></button>
+          <div class="notif-dropdown" id="notifDropdown">
+            <div class="notif-head">
+              <span id="notifHeadTitle">通報提醒</span>
+              <button class="btn" style="padding:5px 9px;font-size:11px;" id="notifPushBtn" onclick="simulatePush()">模擬推播新警特報</button>
+            </div>
+            <div id="notifList"></div>
+          </div>
+        </div>
+        <div class="userchip" onclick="openPasswordModal()" title="帳號設定">
+          <div class="avatar" id="userAvatar">嘉</div>
+          <div>
+            <div id="userName" style="font-weight:700;color:var(--ink);">嘉義縣消防局</div>
+            <div id="userRoleLabel">申請單位</div>
+          </div>
+          <span class="chip-caret">▾</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ============ CUSTOMER: SUBSCRIPTION (default landing page) ============ -->
+      <div class="view active" id="view-subscription">
+        <div class="locked-panel">
+          <div class="locked-head">
+            <h3>🔒 目前訂閱之通報產品（唯讀）</h3>
+            <button class="btn btn-primary" onclick="goTo('newapp')">提出通報服務異動申請</button>
+          </div>
+          <div class="locked-desc">此區塊顯示氣象署目前核定生效中的訂閱項目，僅供查詢，無法直接於此修改。點選任一項目可預覽通報範例與說明。如需新增、取消或變更項目，請透過「新增通報申請」提出，經審核通過後系統才會更新此處的內容。</div>
+          <div class="sub-section-label">天氣警特報類</div>
+          <div class="sub-flow" id="subTop"></div>
+          <div class="sub-section-label">LSR 觀測通報類</div>
+          <div class="sub-flow" id="subLsr"></div>
+          <div class="sub-section-label">通報方式設定</div>
+          <div id="subMeta"></div>
+        </div>
+      </div>
+
+      <!-- ============ CUSTOMER: CONTACT INFO MAINTENANCE ============ -->
+      <div class="view" id="view-contact">
+        <div class="panel" style="padding:22px 24px;max-width:640px;">
+          <div class="section-title" style="margin-top:0;"><span class="n">✓</span>單位聯絡資訊</div>
+          <div class="formgrid">
+            <div class="field" style="grid-column:1/-1;"><label>機關名稱（全銜）</label><input type="text" id="p_org"></div>
+            <div class="field"><label>聯絡人</label><input type="text" id="p_contact"></div>
+            <div class="field"><label>職稱</label><input type="text" id="p_title"></div>
+            <div class="field"><label>聯絡電話</label><input type="tel" id="p_phone"></div>
+            <div class="field"><label>傳真</label><input type="tel" id="p_fax"></div>
+            <div class="field" style="grid-column:1/-1;"><label>電子郵件</label><input type="email" id="p_email"></div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-top:14px;">此資訊將自動帶入每次的通報服務申請，不需重複填寫。如單位承辦人異動，請至此更新。</div>
+          <div style="margin-top:16px;">
+            <button class="btn btn-primary" onclick="saveProfile()">儲存變更</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ CUSTOMER: MY APPLICATIONS ============ -->
+      <div class="view" id="view-myapps">
+        <div class="cards">
+          <div class="card"><div class="num" id="cMyTotal">-</div><div class="label">申請紀錄總數</div></div>
+          <div class="card"><div class="num" id="cMyPending">-</div><div class="label">待審核</div></div>
+          <div class="card"><div class="num" id="cMyApproved">-</div><div class="label">已核可</div></div>
+          <div class="card"><div class="num" id="cMyRejected">-</div><div class="label">已退件</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>申請紀錄</h2>
+            <button class="btn btn-primary" onclick="goTo('newapp')">＋ 新增通報服務申請</button>
+          </div>
+          <table>
+            <thead><tr><th>申請編號</th><th>申請類型</th><th>送出時間</th><th>狀態</th><th>審核意見</th></tr></thead>
+            <tbody id="myAppsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============ CUSTOMER: NEW APPLICATION FORM ============ -->
+      <div class="view" id="view-newapp">
+        <div class="panel" style="padding:24px 28px;">
+
+          <div class="org-summary">
+            <div>
+              <div class="name" id="sumOrg">-</div>
+              <div class="meta" id="sumMeta">-</div>
+            </div>
+            <button class="btn" onclick="goTo('contact')">修改聯絡資訊</button>
+          </div>
+
+          <div class="field" style="max-width:420px;margin-bottom:10px;">
+            <label>申請表單類型 <span class="hint">（比照附表4-1／4-2／4-3）</span></label>
+            <select id="formType" onchange="renderFormType()">
+              <option value="4-1">附表4-1・一般機關警特報通報</option>
+              <option value="4-2">附表4-2・直轄市／縣市政府警特報通報（含加強通報）</option>
+              <option value="4-3">附表4-3・災害性天氣觀測通報服務</option>
+            </select>
+          </div>
+
+          <div class="section-title"><span class="n">1</span>通報項目</div>
+          <div id="formTypeContent"></div>
+
+          <div class="section-title"><span class="n">2</span>通報單位（傳真接收）</div>
+          <div id="faxUnits"></div>
+          <button class="btn" onclick="addFaxRow()" style="margin-top:4px;">＋ 新增通報單位</button>
+
+          <div class="section-title"><span class="n">3</span>其他建議事項</div>
+          <div class="field"><textarea id="f_note" placeholder="如有其他需求請說明"></textarea></div>
+
+          <div class="section-title"><span class="n">4</span>簽署方式</div>
+          <div class="radio-inline" style="margin-bottom:12px;">
+            <label><input type="radio" name="signMethod" value="esign" checked onchange="toggleSignMethod()"> 電子簽章</label>
+            <label><input type="radio" name="signMethod" value="upload" onchange="toggleSignMethod()"> 上傳用印掃描檔</label>
+          </div>
+          <div id="signEsign">
+            <div class="sign-pad">
+              ✒️ 點擊下方按鈕進行線上電子簽署（示意，實際將串接自然人憑證／工商憑證或簽名板元件）
+              <div><button type="button" class="btn btn-primary" onclick="doSign()">開始簽署</button></div>
+              <div class="sig-status" id="sigStatus" style="display:none;">✓ 已完成電子簽署</div>
+            </div>
+          </div>
+          <div id="signUpload" style="display:none;">
+            <div class="upload-zone" onclick="doUpload()">
+              📎 點擊或拖曳上傳單位用印掃描檔（示意，僅供展示，不會真的上傳檔案）
+              <div class="sig-status" id="uploadStatus" style="display:none;">✓ 已上傳 用印回條.pdf</div>
+            </div>
+          </div>
+
+          <div class="confirm-box">
+            <input type="checkbox" id="f_confirm">
+            <label for="f_confirm">本人代表申請機關確認以上資料無誤，同意以電子方式提出申請，其效力等同單位用印回傳。</label>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:22px;">
+            <button class="btn btn-primary" onclick="submitApp()">送出申請</button>
+            <button class="btn" onclick="goTo('myapps')">取消</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ REVIEWER: PENDING QUEUE ============ -->
+      <div class="view" id="view-review">
+        <div class="cards">
+          <div class="card"><div class="num" id="rTotal">-</div><div class="label">全部申請</div></div>
+          <div class="card"><div class="num" id="rPending">-</div><div class="label">待審核</div></div>
+          <div class="card"><div class="num" id="rApproved">-</div><div class="label">已核可</div></div>
+          <div class="card"><div class="num" id="rRejected">-</div><div class="label">已退件</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>申請審核清單</h2></div>
+          <table>
+            <thead><tr><th>申請編號</th><th>申請機關</th><th>申請類型</th><th>送出時間</th><th>狀態</th></tr></thead>
+            <tbody id="reviewBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============ REVIEWER: SERVED UNITS OVERVIEW ============ -->
+      <div class="view" id="view-units">
+        <div class="cards">
+          <div class="card"><div class="num" id="uTotal">-</div><div class="label">受供單位總數</div></div>
+          <div class="card"><div class="num" id="uActive">-</div><div class="label">有效訂閱中</div></div>
+          <div class="card"><div class="num" id="uNone">-</div><div class="label">目前無訂閱項目</div></div>
+          <div class="card"><div class="num" id="uRecent">-</div><div class="label">近30天有異動</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>轄區受供單位清單</h2>
+            <div class="filter-bar">
+              <select id="uStationFilter" onchange="renderUnits()">
+                <option value="all">全部責任區</option>
+                <option value="基隆氣象站">基隆氣象站</option>
+              </select>
+              <input type="text" id="uSearch" placeholder="搜尋單位名稱或代號" oninput="renderUnits()">
+            </div>
+          </div>
+          <table>
+            <thead><tr><th>代號</th><th>單位名稱</th><th>分類</th><th>聯絡人</th><th>傳真／備援傳真</th><th>訂閱項目</th><th>最近異動</th></tr></thead>
+            <tbody id="unitsBody"></tbody>
+          </table>
+        </div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:10px;">當「申請審核」核可通過異動申請時，本清單會自動同步更新對應單位的訂閱項目與異動紀錄。</div>
+      </div>
+
+      <!-- ============ HISTORY + MAP ============ -->
+      <div class="view" id="view-history">
+        <div class="maplayout">
+          <div class="mapwrap">
+            <div id="leafletMap"></div>
+            <div class="legend">
+              <span><i style="background:var(--red);"></i>持續中</span>
+              <span><i style="background:var(--sky);"></i>已解除</span>
+              <span><i style="background:#c7ccd6;"></i>無紀錄</span>
+            </div>
+            <div class="mapcaption">Leaflet + OpenStreetMap 淺色地圖。圓點大小代表事件數量，點選縣市可篩選右側事件列表。<br>示範資料僅標示部分縣市，正式版建議改用行政區界圖資（choropleth）。</div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <h2>歷史災害性天氣通報事件</h2>
+              <button class="btn" onclick="clearFilter()" id="clearFilterBtn" style="display:none;">清除篩選</button>
+            </div>
+            <table>
+              <thead><tr><th>編號</th><th>類型</th><th>影響區域</th><th>發布時間</th><th>狀態</th></tr></thead>
+              <tbody id="historyBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Application detail / review modal -->
+<div class="overlay" id="appModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <h2 id="modalTitle">申請詳情</h2>
+        <div class="sub" style="font-size:12px;color:var(--muted);margin-top:3px;" id="modalSub"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot" id="modalFoot"></div>
+  </div>
+</div>
+
+<!-- Disaster event detail modal -->
+<div class="overlay" id="eventModal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-head">
+      <h2 id="eventModalTitle">事件詳情</h2>
+      <button class="modal-close" onclick="closeEventModal()">×</button>
+    </div>
+    <div class="modal-body" id="eventModalBody"></div>
+  </div>
+</div>
+
+<!-- Served unit detail modal -->
+<div class="overlay" id="unitModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <h2 id="unitModalTitle">單位詳情</h2>
+        <div class="sub" style="font-size:12px;color:var(--muted);margin-top:3px;" id="unitModalSub"></div>
+      </div>
+      <button class="modal-close" onclick="closeUnitModal()">×</button>
+    </div>
+    <div class="modal-body" id="unitModalBody"></div>
+  </div>
+</div>
+
+<!-- Product info preview modal -->
+<div class="overlay" id="productModal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-head">
+      <h2 id="productModalTitle">產品說明</h2>
+      <button class="modal-close" onclick="closeProductModal()">×</button>
+    </div>
+    <div class="modal-body" id="productModalBody"></div>
+  </div>
+</div>
+
+<!-- Password change modal (customer + reviewer, demo only) -->
+<div class="overlay" id="passwordModal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-head">
+      <div>
+        <h2>帳號設定</h2>
+        <div class="sub" style="font-size:12px;color:var(--muted);margin-top:3px;" id="pwModalSub"></div>
+      </div>
+      <button class="modal-close" onclick="closePasswordModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field" style="margin-bottom:14px;"><label>目前密碼</label><input type="password" id="pw_current" placeholder="請輸入目前密碼"></div>
+      <div class="field" style="margin-bottom:14px;"><label>新密碼</label><input type="password" id="pw_new" placeholder="請輸入新密碼"></div>
+      <div class="field"><label>確認新密碼</label><input type="password" id="pw_confirm" placeholder="請再次輸入新密碼"></div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.6;">＊本區塊為原型示意介面，實際密碼變更將於串接後端帳號系統後生效。</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closePasswordModal()">取消</button>
+      <button class="btn btn-primary" onclick="submitPasswordChange()">更新密碼</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= MOCK DATA ================= */
+const ITEMS_43 = ["豪大雨","濃霧","低溫","陸上強風","冰雹","龍捲風","焚風","大雷雨","高溫"];
+
+let memberProfile = {
+  org:"嘉義縣消防局", contact:"陳○○", title:"科員",
+  phone:"05-1234567", fax:"05-1234568", email:"demo@cy.gov.tw"
+};
+
+// 目前氣象署核定生效中的訂閱狀態（唯讀，需經「新增申請」審核通過才會變動）
+let subscribedProducts = {
+  faxBackup:"05-1234599",
+  typhoon:true, otherWarning:true, earthquake:true,
+  weatherWarningEscalate:["颱風警報","豪雨特報"],
+  lsr:{"豪大雨":true,"濃霧":true,"低溫":true,"陸上強風":true,"冰雹":true,"龍捲風":true,"焚風":true,"大雷雨":true,"高溫":true},
+  lsrEscalate:true, escalateShift:"24hr",
+  lastUpdated:"2026-06-03"
+};
+
+let apps = [
+  {id:"DW-A-2026-0012", org:"嘉義縣消防局", type:"4-3", submitted:"2026-06-02 10:22", status:"approved",
+   items:["豪大雨","低溫","陸上強風"], faxUnits:[{name:"嘉義縣消防局災害應變中心",fax:"05-1234570"}],
+   escalate:true, escPhone:"05-1234599", escShift:"24hr", note:"", reviewNote:"資料齊全，核可通過。", reviewer:"王小明", reviewDate:"2026-06-03"},
+  {id:"DW-A-2026-0031", org:"雲林縣古坑鄉公所", type:"4-1", submitted:"2026-06-18 09:05", status:"pending",
+   items:["颱風警報","其他災害性天氣特報"], faxUnits:[{name:"公所值班室",fax:"05-5821236"}],
+   escalate:false, escPhone:"", escShift:"", note:"", reviewNote:"", reviewer:"", reviewDate:""},
+  {id:"DW-A-2026-0033", org:"臺南市政府消防局", type:"4-2", submitted:"2026-06-20 14:40", status:"pending",
+   items:["颱風警報","其他災害性天氣特報"], faxUnits:[{name:"消防局指揮中心",fax:"06-2991236"},{name:"民政局",fax:"06-2991240"}],
+   escalate:true, escPhone:"06-2991299", escShift:"workhour", note:"另需通知本局備援分機。", reviewNote:"", reviewer:"", reviewDate:""},
+  {id:"DW-A-2026-0009", org:"屏東縣恆春鎮公所", type:"4-3", submitted:"2026-05-28 11:15", status:"rejected",
+   items:["高溫","焚風"], faxUnits:[{name:"公所值班室",fax:"08-8891236"}],
+   escalate:false, escPhone:"", escShift:"", note:"", reviewNote:"傳真號碼與公文所留不符，請確認後重新送件。", reviewer:"張美玲", reviewDate:"2026-05-29"},
+];
+let appSeq = 34;
+
+// 受供單位總覽（依氣象站/氣象預報中心回報紀錄格式整理，示範取自基隆氣象站責任區）
+let servedUnits = [
+  {code:"8411", name:"基隆市七堵戶政事務所暖暖辦公室", category:"地方政府", fax:"02-2000-0011", faxBackup:"02-2000-0012",
+   contact:"測試聯絡人A", phone:"02-2000-0001#01", email:"", station:"基隆氣象站",
+   earthquake:false, tsunami:false, weatherWarning:false,
+   lsr:{"豪大雨":true,"濃霧":true,"低溫":true,"陸上強風":true,"冰雹":true,"龍捲風":true,"焚風":true,"大雷雨":true,"高溫":true},
+   escalateWeather:[], escalateLSR:false, escalateShift:"",
+   lastUpdate:"2026.06.22", changeNote:"新增濃霧、強風、冰雹、龍捲風、焚風LSR。", remark:""},
+  {code:"8427", name:"財政部關務署基隆關", category:"中央機關", fax:"02-2000-0021", faxBackup:"",
+   contact:"測試聯絡人B", phone:"02-2000-0002#02", email:"test02@example.gov.tw", station:"基隆氣象站",
+   earthquake:false, tsunami:false, weatherWarning:false,
+   lsr:{"豪大雨":false,"濃霧":false,"低溫":false,"陸上強風":false,"冰雹":false,"龍捲風":false,"焚風":false,"大雷雨":false,"高溫":false},
+   escalateWeather:[], escalateLSR:false, escalateShift:"",
+   lastUpdate:"2026.06.22", changeNote:"變更聯絡人，取消所有通報。", remark:""},
+  {code:"8435", name:"新北市瑞芳區漁會", category:"其他", fax:"02-2000-0031", faxBackup:"",
+   contact:"測試聯絡人C", phone:"02-2000-0003", email:"test03@example.com", station:"基隆氣象站",
+   earthquake:false, tsunami:false, weatherWarning:true,
+   lsr:{"豪大雨":true,"濃霧":false,"低溫":false,"陸上強風":false,"冰雹":false,"龍捲風":false,"焚風":false,"大雷雨":false,"高溫":false},
+   escalateWeather:[], escalateLSR:false, escalateShift:"",
+   lastUpdate:"2026.06.23", changeNote:"取消大雷雨LSR。", remark:""},
+  {code:"8422", name:"新北市貢寮區公所", category:"地方政府", fax:"02-2000-0041", faxBackup:"02-2000-0042",
+   contact:"測試聯絡人D", phone:"02-2000-0004#04", email:"test04@example.gov.tw", station:"基隆氣象站",
+   earthquake:false, tsunami:false, weatherWarning:true,
+   lsr:{"豪大雨":true,"濃霧":false,"低溫":true,"陸上強風":true,"冰雹":false,"龍捲風":false,"焚風":false,"大雷雨":true,"高溫":true},
+   escalateWeather:["颱風警報","豪雨特報"], escalateLSR:true, escalateShift:"上班時間（08:30–17:30）",
+   lastUpdate:"2026.06.29", changeNote:"維持。", remark:""},
+  {code:"8432", name:"台灣電力公司第二核能發電廠控制室", category:"其他", fax:"02-2000-0051", faxBackup:"02-2000-0052",
+   contact:"測試聯絡人E", phone:"02-2000-0005", email:"test05@example.com", station:"基隆氣象站",
+   earthquake:false, tsunami:false, weatherWarning:true,
+   lsr:{"豪大雨":true,"濃霧":true,"低溫":true,"陸上強風":true,"冰雹":true,"龍捲風":true,"焚風":true,"大雷雨":true,"高溫":true},
+   escalateWeather:["颱風警報","豪雨特報"], escalateLSR:true, escalateShift:"全日24小時",
+   lastUpdate:"2026.06.30", changeNote:"維持。", remark:""},
+  {code:"8421", name:"新北市瑞芳區公所", category:"地方政府", fax:"02-2000-0061", faxBackup:"02-2000-0062",
+   contact:"測試聯絡人F", phone:"02-2000-0006#06", email:"test06@example.gov.tw", station:"基隆氣象站",
+   earthquake:false, tsunami:false, weatherWarning:true,
+   lsr:{"豪大雨":true,"濃霧":true,"低溫":true,"陸上強風":true,"冰雹":true,"龍捲風":true,"焚風":true,"大雷雨":true,"高溫":true},
+   escalateWeather:[], escalateLSR:false, escalateShift:"",
+   lastUpdate:"2026.06.30", changeNote:"新增警特報，新增濃霧、強風、冰雹、龍捲風、焚風、大雷雨LSR。", remark:""},
+  {code:"8445", name:"基隆市中山區公所民政課", category:"地方政府", fax:"02-2000-0071", faxBackup:"02-2000-0072",
+   contact:"測試聯絡人G", phone:"02-2000-0007#07", email:"test07@example.gov.tw", station:"基隆氣象站",
+   earthquake:false, tsunami:false, weatherWarning:true,
+   lsr:{"豪大雨":true,"濃霧":false,"低溫":false,"陸上強風":false,"冰雹":false,"龍捲風":false,"焚風":false,"大雷雨":true,"高溫":false},
+   escalateWeather:[], escalateLSR:false, escalateShift:"",
+   lastUpdate:"2026.06.30", changeNote:"新增警特報，取消強風、濃霧、低溫、冰雹、龍捲風、焚風、高溫。", remark:""},
+  {code:"8458", name:"基隆市立醫院", category:"其他", fax:"02-2000-0081", faxBackup:"02-2000-0082",
+   contact:"測試聯絡人H", phone:"02-2000-0008#08", email:"test08@example.gov.tw", station:"基隆氣象站",
+   earthquake:false, tsunami:false, weatherWarning:true,
+   lsr:{"豪大雨":true,"濃霧":true,"低溫":true,"陸上強風":false,"冰雹":false,"龍捲風":true,"焚風":false,"大雷雨":true,"高溫":false},
+   escalateWeather:[], escalateLSR:false, escalateShift:"",
+   lastUpdate:"2026.06.30", changeNote:"新增警特報。", remark:""},
+];
+let unitSeq = 8500;
+
+// real approximate county centroids (lat, lng) for Leaflet markers
+const counties = [
+  {name:"基隆", lat:25.1276, lng:121.7391},
+  {name:"臺北/新北", lat:25.0450, lng:121.5100},
+  {name:"桃園", lat:24.9936, lng:121.3010},
+  {name:"新竹", lat:24.8138, lng:120.9675},
+  {name:"苗栗", lat:24.5602, lng:120.8214},
+  {name:"臺中", lat:24.1477, lng:120.6736},
+  {name:"彰化", lat:24.0518, lng:120.5161},
+  {name:"雲林", lat:23.7092, lng:120.4313},
+  {name:"南投", lat:23.9609, lng:120.9718},
+  {name:"嘉義", lat:23.4801, lng:120.4491},
+  {name:"臺南", lat:22.9999, lng:120.2269},
+  {name:"高雄", lat:22.6273, lng:120.3014},
+  {name:"屏東", lat:22.5519, lng:120.5487},
+  {name:"宜蘭", lat:24.7021, lng:121.7377},
+  {name:"花蓮", lat:23.9871, lng:121.6015},
+  {name:"臺東", lat:22.7583, lng:121.1444},
+  {name:"澎湖", lat:23.5711, lng:119.5793},
+];
+
+let events = [
+  {id:"DW-2026-0031", type:"豪雨特報", regions:["嘉義縣","臺南市","高雄市"], counties:["嘉義","臺南","高雄"], issued:"2026-06-15 08:00", status:"cleared", content:"中南部地區受滯留鋒面影響，嘉義、臺南、高雄山區有局部豪雨發生機率，籲請注意山區土石流及低窪地區積淹水。"},
+  {id:"DW-2026-0032", type:"強風特報", regions:["澎湖縣","金門縣"], counties:["澎湖"], issued:"2026-06-16 06:00", status:"cleared", content:"東北季風增強，澎湖、金門沿海空曠地區及外島平均風力可達6級，陣風8級，海上作業請特別注意風浪。"},
+  {id:"DW-2026-0033", type:"低溫特報", regions:["臺北市","新北市","宜蘭縣"], counties:["臺北/新北","宜蘭"], issued:"2026-06-20 20:00", status:"active", content:"大陸冷氣團南下，臺北、新北、宜蘭低海拔地區已達橙色燈號，籲請注意保暖，特別留意年長者及慢性病患者。"},
+  {id:"DW-2026-0034", type:"濃霧特報", regions:["南投縣","嘉義縣"], counties:["南投","嘉義"], issued:"2026-06-21 05:30", status:"cleared", content:"清晨山區水氣豐富，能見度不足200公尺，山區公路行車請減速慢行並開啟霧燈。"},
+  {id:"DW-2026-0035", type:"大雷雨特報", regions:["臺中市","彰化縣"], counties:["臺中","彰化"], issued:"2026-06-22 15:10", status:"active", content:"午後對流雲系發展旺盛，臺中、彰化局部地區有雷擊、強陣風及短延時強降雨，戶外活動請提高警覺。"},
+  {id:"DW-2026-0036", type:"高溫資訊", regions:["屏東縣","臺東縣"], counties:["屏東","臺東"], issued:"2026-06-23 10:00", status:"active", content:"太平洋高壓增強，屏東、臺東空曠地區有連續高溫情形，請注意補充水分，避免長時間曝曬。"},
+  {id:"DW-2026-0037", type:"豪雨特報", regions:["花蓮縣"], counties:["花蓮"], issued:"2026-06-24 13:45", status:"cleared", content:"花蓮山區受地形抬升影響有局部大雨或豪雨發生的機率，山區請留意坍方及落石。"},
+  {id:"DW-2026-0038", type:"陸上強風特報", regions:["新竹縣","新竹市","苗栗縣"], counties:["新竹","苗栗"], issued:"2026-06-25 07:20", status:"cleared", content:"鋒面通過，新竹、苗栗沿海空曠地區平均風力6級以上，橋樑及高架路段行車請注意側風。"},
+];
+
+/* ================= NAV / ROLE ================= */
+const NAV = {
+  customer: [
+    {key:"subscription", label:"訂閱產品管理"},
+    {key:"contact", label:"聯絡資訊維護"},
+    {key:"newapp", label:"新增通報申請"},
+    {key:"myapps", label:"我的申請"},
+    {key:"history", label:"歷史災害通報"},
+  ],
+  reviewer: [
+    {key:"review", label:"申請審核"},
+    {key:"units", label:"受供單位總覽"},
+    {key:"history", label:"歷史災害通報"},
+  ]
+};
+const TITLES = {
+  myapps:["我的申請","檢視與管理您單位的通報服務申請"],
+  subscription:["訂閱產品管理","查看目前氣象署核定生效中的訂閱項目（唯讀）"],
+  contact:["聯絡資訊維護","管理本單位聯絡資訊，申請通報服務時將自動帶入"],
+  newapp:["新增通報服務申請","比照附表4-1／4-2／4-3欄位線上填寫，送出後等同單位用印回傳"],
+  review:["申請審核","審核各機關送出之通報服務申請"],
+  units:["受供單位總覽","查看責任區內受供單位及其接收之通報項目，掌握轄區現況"],
+  history:["歷史災害性天氣通報","依縣市檢視歷史發布之災害性天氣特報事件"],
+};
+
+let role = "customer";
+let currentView = "subscription";
+
+function setRole(r){
+  role = r;
+  document.body.classList.toggle('role-reviewer', r==='reviewer');
+  document.getElementById('btnRoleCustomer').classList.toggle('active', r==='customer');
+  document.getElementById('btnRoleReviewer').classList.toggle('active', r==='reviewer');
+  updateUserChip();
+  renderNav();
+  renderBell();
+  goTo(r==='customer' ? 'subscription' : 'review');
+}
+
+function updateUserChip(){
+  if(role==='customer'){
+    document.getElementById('userAvatar').textContent = memberProfile.org.charAt(0);
+    document.getElementById('userName').textContent = memberProfile.org;
+    document.getElementById('userRoleLabel').textContent = '申請單位';
+  } else {
+    document.getElementById('userAvatar').textContent = '審';
+    document.getElementById('userName').textContent = '氣象預報中心 審核人員';
+    document.getElementById('userRoleLabel').textContent = '氣象署承辦人員';
+  }
+}
+
+function renderNav(){
+  const nav = document.getElementById('mainnav');
+  nav.innerHTML = '';
+  NAV[role].forEach(item=>{
+    const b = document.createElement('button');
+    b.className = 'navitem' + (item.key===currentView?' active':'');
+    b.onclick = ()=>goTo(item.key);
+    b.innerHTML = '<span class="dot"></span>' + item.label;
+    nav.appendChild(b);
+  });
+}
+
+function goTo(view){
+  currentView = view;
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+view).classList.add('active');
+  document.getElementById('pageTitle').textContent = TITLES[view][0];
+  document.getElementById('pageSub').textContent = TITLES[view][1];
+  renderNav();
+  if(view==='myapps') renderMyApps();
+  if(view==='subscription') renderSubscription();
+  if(view==='contact') renderProfile();
+  if(view==='newapp') { renderOrgSummary(); document.getElementById('formType').value='4-1'; renderFormType(); resetFaxUnits(); resetSignState(); }
+  if(view==='review') renderReview();
+  if(view==='units') renderUnits();
+  if(view==='history') { renderMap(); renderHistory(); }
+}
+
+/* ================= STATUS HELPERS ================= */
+function statusBadge(status){
+  const map = {
+    pending:['pending','待審核'], approved:['approved','已核可'], rejected:['rejected','已退件']
+  };
+  const [cls,label] = map[status];
+  return `<span class="light ${cls}"><span class="bulb"></span>${label}</span>`;
+}
+function typeLabel(t){
+  return {'4-1':'附表4-1・一般機關','4-2':'附表4-2・縣市政府','4-3':'附表4-3・觀測通報'}[t];
+}
+
+/* ================= CUSTOMER: MY APPS ================= */
+function renderMyApps(){
+  const mine = apps.filter(a=>a.org===memberProfile.org);
+  const list = mine.length ? mine : apps.slice(0,1); // fallback for demo visibility
+  document.getElementById('cMyTotal').textContent = list.length;
+  document.getElementById('cMyPending').textContent = list.filter(a=>a.status==='pending').length;
+  document.getElementById('cMyApproved').textContent = list.filter(a=>a.status==='approved').length;
+  document.getElementById('cMyRejected').textContent = list.filter(a=>a.status==='rejected').length;
+  const body = document.getElementById('myAppsBody');
+  if(!list.length){ body.innerHTML = `<tr><td colspan="5"><div class="empty">尚無申請紀錄，點選右上角「新增通報服務申請」開始第一筆申請。</div></td></tr>`; return; }
+  body.innerHTML = list.map(a=>`
+    <tr class="rowbtn" onclick="openAppModal('${a.id}')">
+      <td>${a.id}</td>
+      <td><span class="badge-type">${typeLabel(a.type)}</span></td>
+      <td>${a.submitted}</td>
+      <td>${statusBadge(a.status)}</td>
+      <td style="color:var(--muted);">${a.reviewNote || '－'}</td>
+    </tr>`).join('');
+}
+
+/* ================= MEMBER PROFILE ================= */
+function renderProfile(){
+  document.getElementById('p_org').value = memberProfile.org;
+  document.getElementById('p_contact').value = memberProfile.contact;
+  document.getElementById('p_title').value = memberProfile.title;
+  document.getElementById('p_phone').value = memberProfile.phone;
+  document.getElementById('p_fax').value = memberProfile.fax;
+  document.getElementById('p_email').value = memberProfile.email;
+}
+function saveProfile(){
+  memberProfile = {
+    org: document.getElementById('p_org').value,
+    contact: document.getElementById('p_contact').value,
+    title: document.getElementById('p_title').value,
+    phone: document.getElementById('p_phone').value,
+    fax: document.getElementById('p_fax').value,
+    email: document.getElementById('p_email').value,
+  };
+  updateUserChip();
+  showToast('已儲存聯絡資訊，未來申請將自動帶入');
+}
+
+const PRODUCT_INFO = {
+  "颱風警報（含海上第1報、陸上第1報、解除警報）": {
+    desc:"當颱風可能影響臺灣海域或陸地時，氣象署會依進程發布海上警報、陸上警報，並於颱風遠離後發布解除警報。訂閱本項目後，每一報發布時都會即時傳真通知。",
+    example:"【海上颱風警報第1報】颱風○○中心位置北緯…、東經…，中心氣壓○○百帕，近中心最大風速每秒○○公尺，預測未來24小時內將進入本署警戒海域，請嚴加戒備。"
+  },
+  "其他災害性天氣警特報": {
+    desc:"涵蓋大雨、豪雨、雷電、冰雹、龍捲風等作業要點所定義之災害性天氣現象，只要達到發布標準即會通報，並於現象解除時通報解除。",
+    example:"【豪雨特報】○○縣（市）山區有局部豪雨發生的機率，請注意坍方、落石及低窪地區積淹水，山區請避免溯溪、戲水等活動。"
+  },
+  "地震報告": {
+    desc:"地震發生後，氣象署地震測報中心完成定位分析後發布之地震報告，內容包含震央位置、規模、各地震度等資訊。",
+    example:"【地震報告】○年○月○日○時○分左右，○○地區發生規模○.○地震，最大震度○級，發生於○○公里深處。"
+  },
+  "豪大雨": {desc:"LSR（Local Storm Report）觀測通報，責任區內任一雨量站觀測到雨量初達大雨、豪雨、大豪雨或超大豪雨等級時，即時傳真通報。", example:"【LSR觀測通報】○○雨量站○時○分累積雨量已達豪雨等級（3小時累積雨量○○毫米），請留意周邊坡地及低窪地區安全。"},
+  "濃霧": {desc:"當測站觀測到水平能見度不足200公尺之濃霧現象時通報，山區公路及機場周邊單位可及早因應。", example:"【LSR觀測通報】○○地區清晨觀測到濃霧現象，能見度不足200公尺，行車請減速慢行並開啟霧燈。"},
+  "低溫": {desc:"依平地氣溫是否達黃色／橙色／紅色燈號門檻分級通報，提醒各單位加強對長者、慢性病患等族群的關懷與保暖提醒。", example:"【LSR觀測通報】○○地區平地氣溫降至攝氏○度以下，已達橙色燈號，請加強保暖及低溫關懷作業。"},
+  "陸上強風": {desc:"當測站觀測到平均風力達6級以上或陣風達8級以上時通報，提醒空曠地區、橋樑及施工單位注意。", example:"【LSR觀測通報】○○地區觀測到平均風力6級、陣風8級之強風現象，橋樑及高架路段行車請注意側風。"},
+  "冰雹": {desc:"強烈對流系統引發之冰雹現象觀測通報，常伴隨劇烈天氣發生，影響農漁業及交通。", example:"【LSR觀測通報】○○地區觀測到冰雹現象，請留意戶外活動及車輛、農作物防護。"},
+  "龍捲風": {desc:"觀測到漏斗狀雲或管狀雲等龍捲風現象時通報，因發展迅速、破壞力強，將優先以電話加強通報。", example:"【LSR觀測通報】○○地區觀測到疑似龍捲風現象，請立即避難並遠離門窗及空曠地區。"},
+  "焚風": {desc:"風越過山脈後氣溫上升、濕度驟降之現象，常伴隨乾熱及大範圍風速增強，提醒農業及消防單位留意火災風險。", example:"【LSR觀測通報】○○地區觀測到焚風現象，氣溫明顯上升且濕度下降，請留意用火安全及農作物影響。"},
+  "大雷雨": {desc:"對流系統發展旺盛引發之短延時強降雨、雷擊、強陣風等複合現象通報。", example:"【LSR觀測通報】○○地區午後對流雲系發展旺盛，有雷擊、強陣風及短延時強降雨，戶外活動請提高警覺。"},
+  "高溫": {desc:"空曠地區連續高溫情形之資訊通報，提醒公眾及戶外工作者注意熱傷害預防。", example:"【LSR觀測通報】○○地區已連續多日達高溫標準，請注意補充水分、避免長時間曝曬。"}
+};
+function openProductInfo(name){
+  const info = PRODUCT_INFO[name] || {desc:"（示範資料未提供此項目說明）", example:"（無範例）"};
+  document.getElementById('productModalTitle').textContent = name;
+  document.getElementById('productModalBody').innerHTML = `
+    <div style="font-size:12px;font-weight:800;color:var(--navy);letter-spacing:.05em;margin-bottom:6px;">說明</div>
+    <div style="font-size:13.5px;line-height:1.8;margin-bottom:18px;">${info.desc}</div>
+    <div style="font-size:12px;font-weight:800;color:var(--navy);letter-spacing:.05em;margin-bottom:6px;">通報範例</div>
+    <div style="font-size:13px;line-height:1.8;background:var(--navy-pale);border-radius:8px;padding:14px 16px;color:var(--ink);">${info.example}</div>
+  `;
+  document.getElementById('productModal').classList.add('active');
+}
+function closeProductModal(){ document.getElementById('productModal').classList.remove('active'); }
+
+function subChip(name, on){
+  return `<span class="sub-chip ${on?'on':'off'}"><span class="sub-icon ${on?'on':'off'}">${on?'✓':'✕'}</span>${name}</span>`;
+}
+function previewChip(name, on){
+  return `<span class="sub-chip preview ${on?'on':'off'}" onclick="openProductInfo('${name}')"><span class="sub-icon ${on?'on':'off'}">${on?'✓':'✕'}</span>${name}</span>`;
+}
+function renderSubscription(){
+  document.getElementById('subTop').innerHTML =
+    previewChip('颱風警報（含海上第1報、陸上第1報、解除警報）', subscribedProducts.typhoon) +
+    previewChip('其他災害性天氣警特報', subscribedProducts.otherWarning) +
+    previewChip('地震報告', subscribedProducts.earthquake);
+  document.getElementById('subLsr').innerHTML =
+    ITEMS_43.map(name=> previewChip(name, subscribedProducts.lsr[name])).join('');
+  document.getElementById('subMeta').innerHTML = `
+    <div class="sub-meta-grid">
+      <div class="sub-meta-row"><div class="k">傳真號碼</div><div class="v">${memberProfile.fax}</div></div>
+      <div class="sub-meta-row"><div class="k">備援傳真號碼</div><div class="v">${subscribedProducts.faxBackup||'－'}</div></div>
+      <div class="sub-meta-row"><div class="k">電話加強通報－天氣警特報項目</div><div class="v">${subscribedProducts.weatherWarningEscalate.length?subscribedProducts.weatherWarningEscalate.join('、'):'無'}</div></div>
+      <div class="sub-meta-row"><div class="k">電話加強通報－LSR觀測</div><div class="v">${subscribedProducts.lsrEscalate?'需要':'無需'}</div></div>
+      <div class="sub-meta-row"><div class="k">電話加強通報時段</div><div class="v">${subscribedProducts.escalateShift==='24hr'?'全日24小時':'上班時間'}</div></div>
+      <div class="sub-meta-row"><div class="k">最近異動核可日期</div><div class="v">${subscribedProducts.lastUpdated}</div></div>
+    </div>`;
+}
+
+/* ================= NEW APPLICATION FORM ================= */
+function renderOrgSummary(){
+  document.getElementById('sumOrg').textContent = memberProfile.org;
+  document.getElementById('sumMeta').textContent =
+    `聯絡人：${memberProfile.contact}（${memberProfile.title}）・電話：${memberProfile.phone}・傳真：${memberProfile.fax}・信箱：${memberProfile.email}`;
+}
+function renderFormType(){
+  const t = document.getElementById('formType').value;
+  const el = document.getElementById('formTypeContent');
+  const fixedChips = `
+    <div class="sub-flow">
+      <span class="sub-chip on chip-toggle locked-chip">
+        <span class="sub-icon on">✓</span>颱風警報（含海上第1報、陸上第1報、解除警報）
+      </span>
+      <span class="sub-chip on chip-toggle locked-chip">
+        <span class="sub-icon on">✓</span>其他災害性天氣特報
+      </span>
+    </div>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:8px;">本表為固定通報項目，無需勾選</div>`;
+  if(t==='4-1'){
+    el.innerHTML = `<div class="field"><label>通報項目</label>${fixedChips}</div>`;
+  } else if(t==='4-2'){
+    el.innerHTML = `<div class="field"><label>通報項目</label>${fixedChips}</div>${escalationBlock()}`;
+  } else {
+    el.innerHTML = `
+      <div class="field"><label>需要通報項目 <span class="hint">（可複選，點選即可切換）</span></label>
+        <div class="sub-flow">
+          ${ITEMS_43.map(i=>`<span class="sub-chip off chip-toggle" data-item="${i}" onclick="toggleFormChip(this)"><span class="sub-icon off">✕</span>${i}</span>`).join('')}
+        </div>
+      </div>
+      ${escalationBlock()}`;
+  }
+}
+function toggleFormChip(el){
+  const turningOn = el.classList.contains('off');
+  el.classList.toggle('on', turningOn);
+  el.classList.toggle('off', !turningOn);
+  const icon = el.querySelector('.sub-icon');
+  icon.classList.toggle('on', turningOn);
+  icon.classList.toggle('off', !turningOn);
+  icon.textContent = turningOn ? '✓' : '✕';
+}
+function escalationBlock(){
+  return `
+    <div class="field" style="margin-top:18px;">
+      <label>電話／多元即時通訊加強通報</label>
+      <div class="radio-inline" style="margin-bottom:10px;">
+        <label><input type="radio" name="escalate" value="no" checked onchange="toggleEscFields()"> 無需通報</label>
+        <label><input type="radio" name="escalate" value="yes" onchange="toggleEscFields()"> 需通報</label>
+      </div>
+      <div id="escFields" style="display:none;">
+        <div class="formgrid">
+          <div class="field"><label>加強通報聯絡電話</label><input type="tel" id="f_escphone" placeholder="含分機"></div>
+          <div class="field"><label>通報時段</label>
+            <select id="f_escshift">
+              <option value="workhour">正常上班時間（週一至週五 08:30–17:30）</option>
+              <option value="24hr">全日24小時</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+function toggleEscFields(){
+  const yes = document.querySelector('input[name=escalate]:checked').value === 'yes';
+  document.getElementById('escFields').style.display = yes ? 'block' : 'none';
+}
+
+function toggleSignMethod(){
+  const upload = document.querySelector('input[name=signMethod]:checked').value === 'upload';
+  document.getElementById('signEsign').style.display = upload ? 'none' : 'block';
+  document.getElementById('signUpload').style.display = upload ? 'block' : 'none';
+}
+function doSign(){
+  document.getElementById('sigStatus').style.display = 'inline-flex';
+  showToast('示意功能：實際將串接電子簽章元件（如自然人憑證／工商憑證或簽名板）');
+}
+function doUpload(){
+  document.getElementById('uploadStatus').style.display = 'inline-flex';
+  showToast('示意功能：實際檔案上傳與儲存由工程師串接後端');
+}
+function resetSignState(){
+  document.querySelector('input[name=signMethod][value=esign]').checked = true;
+  toggleSignMethod();
+  document.getElementById('sigStatus').style.display = 'none';
+  document.getElementById('uploadStatus').style.display = 'none';
+}
+
+function resetFaxUnits(){
+  const wrap = document.getElementById('faxUnits');
+  wrap.innerHTML = '';
+  addFaxRow(memberProfile.org + '值班室', memberProfile.fax);
+}
+function addFaxRow(name='', fax=''){
+  const wrap = document.getElementById('faxUnits');
+  if(wrap.children.length>=3){ showToast('最多新增3個通報單位'); return; }
+  const row = document.createElement('div');
+  row.className='faxrow';
+  row.innerHTML = `
+    <div class="field"><label>通報單位名稱</label><input type="text" class="faxname" value="${name}" placeholder="例：災害應變中心"></div>
+    <div class="field"><label>傳真號碼</label><input type="tel" class="faxnum" value="${fax}" placeholder="(0)-xxxxxxx"></div>
+    <button class="btn" onclick="this.parentElement.remove()">移除</button>`;
+  wrap.appendChild(row);
+}
+
+function submitApp(){
+  if(!document.getElementById('f_confirm').checked){
+    showToast('請勾選確認同意事項後再送出'); return;
+  }
+  const t = document.getElementById('formType').value;
+  let items = [];
+  if(t==='4-1'||t==='4-2') items = ['颱風警報','其他災害性天氣特報'];
+  else items = Array.from(document.querySelectorAll('#formTypeContent .chip-toggle.on')).map(c=>c.dataset.item);
+
+  const faxUnits = Array.from(document.querySelectorAll('#faxUnits .faxrow')).map(r=>({
+    name: r.querySelector('.faxname').value, fax: r.querySelector('.faxnum').value
+  }));
+
+  const escalate = document.querySelector('input[name=escalate]') ? document.querySelector('input[name=escalate]:checked').value==='yes' : false;
+
+  const app = {
+    id: `DW-A-2026-${String(appSeq++).padStart(4,'0')}`,
+    org: memberProfile.org,
+    type: t,
+    submitted: new Date().toISOString().slice(0,16).replace('T',' '),
+    status: 'pending',
+    items, faxUnits, escalate,
+    escPhone: escalate ? document.getElementById('f_escphone').value : '',
+    escShift: escalate ? document.getElementById('f_escshift').value : '',
+    note: document.getElementById('f_note').value,
+    reviewNote:'', reviewer:'', reviewDate:''
+  };
+  apps.unshift(app);
+  showToast(`已送出申請 ${app.id}，等同單位用印回傳，靜候氣象署審核`);
+  goTo('myapps');
+}
+
+/* ================= REVIEWER ================= */
+function renderReview(){
+  document.getElementById('rTotal').textContent = apps.length;
+  document.getElementById('rPending').textContent = apps.filter(a=>a.status==='pending').length;
+  document.getElementById('rApproved').textContent = apps.filter(a=>a.status==='approved').length;
+  document.getElementById('rRejected').textContent = apps.filter(a=>a.status==='rejected').length;
+  const body = document.getElementById('reviewBody');
+  body.innerHTML = apps.map(a=>`
+    <tr class="rowbtn" onclick="openAppModal('${a.id}')">
+      <td>${a.id}</td>
+      <td>${a.org}</td>
+      <td><span class="badge-type">${typeLabel(a.type)}</span></td>
+      <td>${a.submitted}</td>
+      <td>${statusBadge(a.status)}</td>
+    </tr>`).join('');
+}
+
+/* ================= APP MODAL ================= */
+function openAppModal(id){
+  const a = apps.find(x=>x.id===id);
+  document.getElementById('modalTitle').textContent = a.id;
+  document.getElementById('modalSub').textContent = typeLabel(a.type) + ' ・ 送出時間 ' + a.submitted;
+  const faxHtml = a.faxUnits.map(f=>`${f.name}（${f.fax}）`).join('、') || '無';
+  document.getElementById('modalBody').innerHTML = `
+    <div class="detail-row"><div class="k">申請機關</div><div class="v">${a.org}</div></div>
+    <div class="detail-row"><div class="k">通報項目</div><div class="v"><div class="sub-flow">${a.items.map(i=>subChip(i,true)).join('')}</div></div></div>
+    <div class="detail-row"><div class="k">通報單位（傳真）</div><div class="v">${faxHtml}</div></div>
+    <div class="detail-row"><div class="k">加強通報</div><div class="v">${a.escalate ? `需要（${a.escPhone||'－'}／${a.escShift==='24hr'?'全日24小時':'上班時間'}）` : '無需'}</div></div>
+    <div class="detail-row"><div class="k">其他建議事項</div><div class="v">${a.note || '－'}</div></div>
+    <div class="detail-row"><div class="k">目前狀態</div><div class="v">${statusBadge(a.status)}</div></div>
+    ${a.status!=='pending' ? `
+    <div class="detail-row"><div class="k">審核意見</div><div class="v">${a.reviewNote||'－'}</div></div>
+    <div class="detail-row"><div class="k">承辦人／日期</div><div class="v">${a.reviewer||'－'} ・ ${a.reviewDate||'－'}</div></div>` : ''}
+    ${role==='reviewer' && a.status==='pending' ? `
+    <div class="field" style="margin-top:16px;"><label>審核意見</label><textarea id="reviewNoteInput" placeholder="通過或退件說明"></textarea></div>` : ''}
+  `;
+  const foot = document.getElementById('modalFoot');
+  if(role==='reviewer' && a.status==='pending'){
+    foot.innerHTML = `
+      <button class="btn btn-reject" onclick="decideApp('${a.id}','rejected')">退件</button>
+      <button class="btn btn-approve" onclick="decideApp('${a.id}','approved')">通過核可</button>`;
+  } else {
+    foot.innerHTML = `<button class="btn" onclick="closeModal()">關閉</button>`;
+  }
+  document.getElementById('appModal').classList.add('active');
+}
+function closeModal(){ document.getElementById('appModal').classList.remove('active'); }
+
+function decideApp(id, status){
+  const a = apps.find(x=>x.id===id);
+  const note = document.getElementById('reviewNoteInput').value;
+  if(status==='rejected' && !note.trim()){ showToast('退件請填寫審核意見說明'); return; }
+  a.status = status;
+  a.reviewNote = note || (status==='approved' ? '資料齊全，核可通過。' : '');
+  a.reviewer = '王小明';
+  a.reviewDate = new Date().toISOString().slice(0,10);
+  closeModal();
+  renderReview();
+  if(status==='approved'){
+    const sync = syncServedUnit(a);
+    if(currentView==='units') renderUnits();
+    showToast(`${a.id} 已核可通過，並已${sync.isNew?'新增至':'同步更新'}受供單位總覽：「${sync.unit.name}」`);
+  } else {
+    showToast(`${a.id} 已退件，系統將自動通知申請機關`);
+  }
+}
+
+/* ================= SERVED UNITS OVERVIEW (reviewer) ================= */
+function hasAnySub(u){ return u.earthquake || u.tsunami || u.weatherWarning || Object.values(u.lsr).some(Boolean); }
+function isRecentUpdate(dateStr){
+  if(!dateStr) return false;
+  const d = new Date(dateStr.replace(/\./g,'-'));
+  const now = new Date('2026-07-02');
+  const diff = (now-d)/86400000;
+  return diff>=0 && diff<=30;
+}
+function subSummary(u){
+  const lsrCount = Object.values(u.lsr).filter(Boolean).length;
+  const parts = [];
+  if(u.earthquake) parts.push('地震報告');
+  if(u.tsunami) parts.push('海嘯報告');
+  if(u.weatherWarning) parts.push('天氣警特報');
+  if(lsrCount) parts.push(`LSR ${lsrCount}/9`);
+  return parts.length ? parts.map(p=>`<span class="badge-type" style="margin-right:4px;">${p}</span>`).join('') : `<span style="color:var(--muted);font-size:12px;">無訂閱</span>`;
+}
+function renderUnits(){
+  const stationVal = document.getElementById('uStationFilter').value;
+  const q = (document.getElementById('uSearch').value||'').trim();
+  const list = servedUnits.filter(u =>
+    (stationVal==='all' || u.station===stationVal) &&
+    (!q || u.name.includes(q) || (u.code && u.code.includes(q)))
+  );
+  document.getElementById('uTotal').textContent = servedUnits.length;
+  document.getElementById('uActive').textContent = servedUnits.filter(hasAnySub).length;
+  document.getElementById('uNone').textContent = servedUnits.filter(u=>!hasAnySub(u)).length;
+  document.getElementById('uRecent').textContent = servedUnits.filter(u=>isRecentUpdate(u.lastUpdate)).length;
+
+  const body = document.getElementById('unitsBody');
+  if(!list.length){ body.innerHTML = `<tr><td colspan="7"><div class="empty">查無符合條件的受供單位</div></td></tr>`; return; }
+  body.innerHTML = list.map(u=>`
+    <tr class="rowbtn" onclick="openUnitModal('${u.code}')">
+      <td>${u.code||'－'}</td>
+      <td>${u.name}</td>
+      <td><span class="badge-type">${u.category||'未分類'}</span></td>
+      <td>${u.contact||'－'}</td>
+      <td style="font-size:12px;color:var(--muted);">${u.fax||'－'}${u.faxBackup?('／'+u.faxBackup):''}</td>
+      <td>${subSummary(u)}</td>
+      <td style="font-size:12px;color:var(--muted);">${u.lastUpdate||'－'}</td>
+    </tr>`).join('');
+}
+function openUnitModal(code){
+  const u = servedUnits.find(x=>x.code===code);
+  document.getElementById('unitModalTitle').textContent = u.name;
+  document.getElementById('unitModalSub').textContent = `代號 ${u.code||'－'} ・ ${u.category||'未分類'} ・ 責任區：${u.station||'－'}`;
+  document.getElementById('unitModalBody').innerHTML = `
+    <div class="detail-row"><div class="k">聯絡人</div><div class="v">${u.contact||'－'}</div></div>
+    <div class="detail-row"><div class="k">電話</div><div class="v">${u.phone||'－'}</div></div>
+    <div class="detail-row"><div class="k">傳真／備援傳真</div><div class="v">${u.fax||'－'}${u.faxBackup?('／'+u.faxBackup):''}</div></div>
+    <div class="detail-row"><div class="k">電子郵件</div><div class="v">${u.email||'－'}</div></div>
+    <div class="sub-section-label" style="margin-top:16px;">天氣警特報類</div>
+    <div class="sub-flow">${subChip('地震報告',u.earthquake)}${subChip('海嘯報告',u.tsunami)}${subChip('天氣警特報',u.weatherWarning)}</div>
+    <div class="sub-section-label">LSR 觀測通報類</div>
+    <div class="sub-flow">${ITEMS_43.map(n=>subChip(n,u.lsr[n])).join('')}</div>
+    <div class="sub-section-label">通報方式設定</div>
+    <div class="sub-meta-grid">
+      <div class="sub-meta-row"><div class="k">電話加強通報－天氣警特報</div><div class="v">${u.escalateWeather&&u.escalateWeather.length?u.escalateWeather.join('、'):'無'}</div></div>
+      <div class="sub-meta-row"><div class="k">電話加強通報－LSR觀測</div><div class="v">${u.escalateLSR?'需要':'無需'}</div></div>
+      <div class="sub-meta-row"><div class="k">加強通報時段</div><div class="v">${u.escalateShift||'－'}</div></div>
+      <div class="sub-meta-row"><div class="k">最近異動日期</div><div class="v">${u.lastUpdate||'－'}</div></div>
+    </div>
+    <div class="detail-row" style="flex-direction:column;margin-top:12px;"><div class="k" style="margin-bottom:6px;">異動內容</div><div class="v" style="font-weight:400;">${u.changeNote||'－'}</div></div>
+    ${u.remark?`<div class="detail-row" style="flex-direction:column;"><div class="k" style="margin-bottom:6px;">備註</div><div class="v" style="font-weight:400;">${u.remark}</div></div>`:''}
+  `;
+  document.getElementById('unitModal').classList.add('active');
+}
+function closeUnitModal(){ document.getElementById('unitModal').classList.remove('active'); }
+
+// 申請審核通過後，自動同步（新增或更新）對應的受供單位紀錄
+function syncServedUnit(app){
+  let unit = servedUnits.find(u=>u.name===app.org);
+  const isNew = !unit;
+  const isOwnOrg = memberProfile.org === app.org;
+  if(!unit){
+    unit = {
+      code: String(unitSeq++), name: app.org,
+      category: app.type==='4-2' ? '地方政府' : (app.type==='4-1' ? '中央機關' : '其他'),
+      fax:"", faxBackup:"",
+      contact: isOwnOrg?memberProfile.contact:"（依申請書聯絡人）",
+      phone: isOwnOrg?memberProfile.phone:"", email: isOwnOrg?memberProfile.email:"",
+      station:"基隆氣象站",
+      earthquake:false, tsunami:false, weatherWarning:false,
+      lsr:{"豪大雨":false,"濃霧":false,"低溫":false,"陸上強風":false,"冰雹":false,"龍捲風":false,"焚風":false,"大雷雨":false,"高溫":false},
+      escalateWeather:[], escalateLSR:false, escalateShift:"", lastUpdate:"", changeNote:"", remark:""
+    };
+    servedUnits.unshift(unit);
+  }
+  if(app.type==='4-1' || app.type==='4-2'){
+    unit.weatherWarning = true;
+    if(app.escalate) unit.escalateWeather = ['颱風警報','豪雨特報'];
+  } else if(app.type==='4-3'){
+    ITEMS_43.forEach(name=> unit.lsr[name] = app.items.includes(name));
+    unit.escalateLSR = !!app.escalate;
+  }
+  if(app.faxUnits && app.faxUnits[0]) unit.fax = app.faxUnits[0].fax || unit.fax;
+  if(app.faxUnits && app.faxUnits[1]) unit.faxBackup = app.faxUnits[1].fax || unit.faxBackup;
+  if(app.escalate && app.escShift) unit.escalateShift = app.escShift==='24hr' ? '全日24小時' : '上班時間（08:30–17:30）';
+  unit.lastUpdate = new Date().toISOString().slice(0,10).replace(/-/g,'.');
+  unit.changeNote = `依申請 ${app.id} 核可異動：${app.items.join('、')}`;
+  showToast(isNew ? `已於受供單位總覽新增「${unit.name}」` : `已同步更新受供單位總覽：「${unit.name}」`);
+}
+
+/* ================= HISTORY MAP (Leaflet + OSM light basemap) ================= */
+let leafletMap = null;
+let countyMarkers = [];
+let filterCounty = null;
+
+function initMap(){
+  if(leafletMap) return;
+  leafletMap = L.map('leafletMap', {scrollWheelZoom:false}).setView([23.6,120.9], 7.4);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: 'abcd', maxZoom: 19
+  }).addTo(leafletMap);
+}
+
+function renderMap(){
+  initMap();
+  countyMarkers.forEach(m=>leafletMap.removeLayer(m));
+  countyMarkers = [];
+
+  const countyEventCount = {};
+  events.forEach(e=> e.counties.forEach(c=> countyEventCount[c] = (countyEventCount[c]||0)+1));
+  const hasActive = c => events.some(e=>e.counties.includes(c) && e.status==='active');
+
+  counties.forEach(c=>{
+    const n = countyEventCount[c.name]||0;
+    const r = n ? 8+Math.min(n,4)*3 : 5;
+    const color = n===0 ? '#c7ccd6' : (hasActive(c.name) ? '#c0392b' : '#5b8fc4');
+    const selected = filterCounty===c.name;
+    const marker = L.circleMarker([c.lat, c.lng], {
+      radius:r, fillColor:color, fillOpacity: n?0.85:0.5,
+      color: selected ? '#14213d' : color, weight: selected ? 3 : 1
+    }).addTo(leafletMap);
+    marker.bindTooltip(`${c.name}${n?`（${n} 件）`:''}`);
+    marker.on('click', ()=>filterByCounty(c.name));
+    countyMarkers.push(marker);
+  });
+
+  setTimeout(()=>{ if(leafletMap) leafletMap.invalidateSize(); }, 60);
+}
+function filterByCounty(name){
+  filterCounty = (filterCounty===name) ? null : name;
+  document.getElementById('clearFilterBtn').style.display = filterCounty ? 'inline-block' : 'none';
+  renderMap();
+  renderHistory();
+}
+function clearFilter(){ filterCounty=null; document.getElementById('clearFilterBtn').style.display='none'; renderMap(); renderHistory(); }
+
+function renderHistory(){
+  const list = filterCounty ? events.filter(e=>e.counties.includes(filterCounty)) : events;
+  const body = document.getElementById('historyBody');
+  if(!list.length){ body.innerHTML = `<tr><td colspan="5"><div class="empty">此縣市目前無歷史通報紀錄</div></td></tr>`; return; }
+  body.innerHTML = list.map(e=>`
+    <tr class="rowbtn" onclick="openEventModal('${e.id}')">
+      <td>${e.id}</td>
+      <td><span class="badge-type">${e.type}</span></td>
+      <td>${e.regions.join('、')}</td>
+      <td>${e.issued}</td>
+      <td><span class="light ${e.status==='active'?'active':'cleared'}"><span class="bulb"></span>${e.status==='active'?'持續中':'已解除'}</span></td>
+    </tr>`).join('');
+}
+function openEventModal(id){
+  const e = events.find(x=>x.id===id);
+  document.getElementById('eventModalTitle').textContent = e.id;
+  document.getElementById('eventModalBody').innerHTML = `
+    <div class="detail-row"><div class="k">類型</div><div class="v">${e.type}</div></div>
+    <div class="detail-row"><div class="k">影響區域</div><div class="v">${e.regions.join('、')}</div></div>
+    <div class="detail-row"><div class="k">發布時間</div><div class="v">${e.issued}</div></div>
+    <div class="detail-row"><div class="k">狀態</div><div class="v"><span class="light ${e.status==='active'?'active':'cleared'}"><span class="bulb"></span>${e.status==='active'?'持續中':'已解除'}</span></div></div>
+    <div class="detail-row" style="flex-direction:column;"><div class="k" style="margin-bottom:6px;">內容</div><div class="v" style="font-weight:400;line-height:1.7;">${e.content}</div></div>
+  `;
+  document.getElementById('eventModal').classList.add('active');
+}
+function closeEventModal(){ document.getElementById('eventModal').classList.remove('active'); }
+
+/* ================= NOTIFICATIONS ================= */
+function toggleNotif(){
+  const d = document.getElementById('notifDropdown');
+  if(d.classList.contains('active')){ d.classList.remove('active'); }
+  else { renderBell(); d.classList.add('active'); }
+}
+function closeNotif(){ document.getElementById('notifDropdown').classList.remove('active'); }
+document.addEventListener('click', function(e){
+  const wrap = document.getElementById('notifWrap');
+  if(wrap && !wrap.contains(e.target)) closeNotif();
+});
+
+function renderBell(){
+  const badge = document.getElementById('bellBadge');
+  const list = document.getElementById('notifList');
+  const pushBtn = document.getElementById('notifPushBtn');
+  if(role==='customer'){
+    document.getElementById('notifHeadTitle').textContent = '您訂閱項目的最新通報';
+    pushBtn.style.display = 'inline-block';
+    const items = events.slice(0,8);
+    const unread = events.filter(e=>e.status==='active').length;
+    badge.style.display = unread ? 'flex' : 'none';
+    badge.textContent = unread;
+    list.innerHTML = items.length ? items.map(e=>`
+      <div class="notif-item" onclick="closeNotif();openEventModal('${e.id}')">
+        <span class="nd" style="background:${e.status==='active'?'var(--red)':'var(--sky)'};"></span>
+        <div>
+          <div class="nt">${e.type}・${e.regions.join('、')}</div>
+          <div class="nm">${e.issued}　${e.status==='active'?'持續中':'已解除'}</div>
+        </div>
+      </div>`).join('') : `<div class="notif-empty">目前無通報紀錄</div>`;
+  } else {
+    document.getElementById('notifHeadTitle').textContent = '待審核申請提醒';
+    pushBtn.style.display = 'none';
+    const pending = apps.filter(a=>a.status==='pending');
+    badge.style.display = pending.length ? 'flex' : 'none';
+    badge.textContent = pending.length;
+    list.innerHTML = pending.length ? pending.map(a=>`
+      <div class="notif-item" onclick="closeNotif();openAppModal('${a.id}')">
+        <span class="nd" style="background:var(--amber);"></span>
+        <div>
+          <div class="nt">${a.org}</div>
+          <div class="nm">${typeLabel(a.type)}　送出於 ${a.submitted}</div>
+        </div>
+      </div>`).join('') : `<div class="notif-empty">目前無待審核申請</div>`;
+  }
+}
+let pushSeq = 39;
+function simulatePush(){
+  const demo = {
+    id:`DW-2026-00${pushSeq++}`, type:"豪雨特報", regions:["嘉義縣"], counties:["嘉義"],
+    issued:new Date().toISOString().slice(0,16).replace('T',' '), status:"active",
+    content:"（模擬推播）嘉義地區午後對流雲系發展旺盛，有局部豪雨發生的機率，請留意低窪地區積淹水及山區坡地安全。"
+  };
+  events.unshift(demo);
+  renderBell();
+  if(currentView==='history'){ renderMap(); renderHistory(); }
+  showToast(`📣 新警特報已推播：${demo.type}（${demo.regions.join('、')}）`);
+}
+
+/* ================= PASSWORD (demo only) ================= */
+function openPasswordModal(){
+  document.getElementById('pwModalSub').textContent =
+    (role==='customer' ? memberProfile.org + '・申請單位帳號' : '氣象預報中心・審核管理端帳號');
+  document.getElementById('pw_current').value = '';
+  document.getElementById('pw_new').value = '';
+  document.getElementById('pw_confirm').value = '';
+  document.getElementById('passwordModal').classList.add('active');
+}
+function closePasswordModal(){ document.getElementById('passwordModal').classList.remove('active'); }
+function submitPasswordChange(){
+  const cur = document.getElementById('pw_current').value;
+  const n1 = document.getElementById('pw_new').value;
+  const n2 = document.getElementById('pw_confirm').value;
+  if(!cur || !n1 || !n2){ showToast('請完整填寫目前密碼與新密碼'); return; }
+  if(n1 !== n2){ showToast('兩次輸入的新密碼不一致，請重新確認'); return; }
+  if(n1.length < 8){ showToast('新密碼長度請至少8碼'); return; }
+  closePasswordModal();
+  showToast('示意功能：密碼已更新（模擬，尚未串接後端帳號系統）');
+}
+
+/* ================= TOAST ================= */
+let toastTimer;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 3200);
+}
+
+/* ================= INIT ================= */
+updateUserChip();
+renderNav();
+renderBell();
+goTo('subscription');
+toggleEscFields();
+</script>
+</body>
+</html>
